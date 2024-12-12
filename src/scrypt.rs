@@ -19,14 +19,13 @@ use std::mem::size_of;
 use cryptoutil::copy_memory;
 
 use rand::{OsRng, Rng};
-use serialize::base64;
-use serialize::base64::{FromBase64, ToBase64};
 
 use cryptoutil::{read_u32_le, read_u32v_le, write_u32_le};
 use hmac::Hmac;
 use pbkdf2::pbkdf2;
 use sha2::Sha256;
 use util::fixed_time_eq;
+use util_base64::{FromBase64, ToBase64};
 
 // The salsa20/8 core function.
 fn salsa20_8(input: &[u8], output: &mut [u8]) {
@@ -141,7 +140,7 @@ fn scrypt_ro_mix(b: &mut [u8], v: &mut [u8], t: &mut [u8], n: usize) {
 
 /**
  * The Scrypt parameter values.
- */
+*/
 #[derive(Clone, Copy)]
 pub struct ScryptParams {
     log_n: u8,
@@ -152,14 +151,14 @@ pub struct ScryptParams {
 impl ScryptParams {
     /**
      * Create a new instance of ScryptParams.
-     *
-     * # Arguments
-     *
-     * * log_n - The log2 of the Scrypt parameter N
-     * * r - The Scrypt parameter r
-     * * p - The Scrypt parameter p
-     *
-     */
+    *
+    * # Arguments
+    *
+    * * log_n - The log2 of the Scrypt parameter N
+    * * r - The Scrypt parameter r
+    * * p - The Scrypt parameter p
+    *
+    */
     pub fn new(log_n: u8, r: u32, p: u32) -> ScryptParams {
         assert!(r > 0);
         assert!(p > 0);
@@ -211,15 +210,15 @@ impl ScryptParams {
 
 /**
  * The scrypt key derivation function.
- *
- * # Arguments
- *
- * * password - The password to process as a byte vector
- * * salt - The salt value to use as a byte vector
- * * params - The ScryptParams to use
- * * output - The resulting derived key is returned in this byte vector.
- *
- */
+*
+* # Arguments
+*
+* * password - The password to process as a byte vector
+* * salt - The salt value to use as a byte vector
+* * params - The ScryptParams to use
+* * output - The resulting derived key is returned in this byte vector.
+*
+*/
 pub fn scrypt(password: &[u8], salt: &[u8], params: &ScryptParams, output: &mut [u8]) {
     // This check required by Scrypt:
     // check output.len() > 0 && output.len() <= (2^32 - 1) * 32
@@ -249,26 +248,26 @@ pub fn scrypt(password: &[u8], salt: &[u8], params: &ScryptParams, output: &mut 
 
 /**
  * scrypt_simple is a helper function that should be sufficient for the majority of cases where
- * an application needs to use Scrypt to hash a password for storage. The result is a String that
- * contains the parameters used as part of its encoding. The scrypt_check function may be used on
- * a password to check if it is equal to a hashed value.
- *
- * # Format
- *
- * The format of the output is a modified version of the Modular Crypt Format that encodes algorithm
- * used and the parameter values. If all parameter values can each fit within a single byte, a
- * compact format is used (format 0). However, if any value cannot, an expanded format where the r
- * and p parameters are encoded using 4 bytes (format 1) is used. Both formats use a 128-bit salt
- * and a 256-bit hash. The format is indicated as "rscrypt" which is short for "Rust Scrypt format."
- *
- * $rscrypt$<format>$<base64(log_n,r,p)>$<base64(salt)>$<based64(hash)>$
- *
- * # Arguments
- *
- * * password - The password to process as a str
- * * params - The ScryptParams to use
- *
- */
+* an application needs to use Scrypt to hash a password for storage. The result is a String that
+* contains the parameters used as part of its encoding. The scrypt_check function may be used on
+* a password to check if it is equal to a hashed value.
+*
+* # Format
+*
+* The format of the output is a modified version of the Modular Crypt Format that encodes algorithm
+* used and the parameter values. If all parameter values can each fit within a single byte, a
+* compact format is used (format 0). However, if any value cannot, an expanded format where the r
+* and p parameters are encoded using 4 bytes (format 1) is used. Both formats use a 128-bit salt
+* and a 256-bit hash. The format is indicated as "rscrypt" which is short for "Rust Scrypt format."
+*
+* $rscrypt$<format>$<base64(log_n,r,p)>$<base64(salt)>$<based64(hash)>$
+*
+* # Arguments
+*
+* * password - The password to process as a str
+* * params - The ScryptParams to use
+*
+*/
 pub fn scrypt_simple(password: &str, params: &ScryptParams) -> io::Result<String> {
     let mut rng = try!(OsRng::new());
 
@@ -287,19 +286,19 @@ pub fn scrypt_simple(password: &str, params: &ScryptParams) -> io::Result<String
         tmp[0] = params.log_n;
         tmp[1] = params.r as u8;
         tmp[2] = params.p as u8;
-        result.push_str(&*tmp.to_base64(base64::STANDARD));
+        result.push_str(&*tmp.to_base64());
     } else {
         result.push_str("1$");
         let mut tmp = [0u8; 9];
         tmp[0] = params.log_n;
         write_u32_le(&mut tmp[1..5], params.r);
         write_u32_le(&mut tmp[5..9], params.p);
-        result.push_str(&*tmp.to_base64(base64::STANDARD));
+        result.push_str(&*tmp.to_base64());
     }
     result.push('$');
-    result.push_str(&*salt.to_base64(base64::STANDARD));
+    result.push_str(&*salt.to_base64());
     result.push('$');
-    result.push_str(&*dk.to_base64(base64::STANDARD));
+    result.push_str(&*dk.to_base64());
     result.push('$');
 
     Ok(result)
@@ -307,14 +306,14 @@ pub fn scrypt_simple(password: &str, params: &ScryptParams) -> io::Result<String
 
 /**
  * scrypt_check compares a password against the result of a previous call to scrypt_simple and
- * returns true if the passed in password hashes to the same value.
- *
- * # Arguments
- *
- * * password - The password to process as a str
- * * hashed_value - A string representing a hashed password returned by scrypt_simple()
- *
- */
+* returns true if the passed in password hashes to the same value.
+*
+* # Arguments
+*
+* * password - The password to process as a str
+* * hashed_value - A string representing a hashed password returned by scrypt_simple()
+*
+*/
 pub fn scrypt_check(password: &str, hashed_value: &str) -> Result<bool, &'static str> {
     static ERR_STR: &'static str = "Hash is not in Rust Scrypt format.";
 
